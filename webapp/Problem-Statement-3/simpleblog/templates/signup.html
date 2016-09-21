@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<head>
+  <title>Just Sign Up</title>
+  <link rel="stylesheet" href="/static/signup.css">
+</head>
+<body>
+  <h2>Sign Up</h2>
+  <form method=post>
+    <table>
+
+      <tr>
+        <td>Username:</td>
+        <td>
+          <input name="username" value="{{username}}">
+        </td>
+        <td class="error">{{(username_ERR)}}</td>
+      </tr>
+
+      <tr>
+        <td>Password:</td>
+        <td>
+          <input name="password" type="password" value="{{password}}">
+        </td>
+        <td class="error">{{password_ERR}}</td>
+      </tr>
+
+      <tr>
+        <td>Verify Password:</td>
+        <td>
+          <input name="verify" type="password">
+        </td>
+          <td class="error">{{password_match_ERR}}</td>
+      </tr>
+
+      <tr>
+        <td>Email (optional):</td>
+        <td>
+          <input name="email" type="text" value="{{email}}">
+        </td>
+        <td class="error">{{email_ERR}}
+      </tr>
+    </table>
+
+    <input type="submit">
+
+  </form>
+
+</body>
