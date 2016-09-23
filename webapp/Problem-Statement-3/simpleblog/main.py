@@ -81,9 +81,6 @@ class BlogHandler(webapp2.RequestHandler):
         webapp2.RequestHandler.initialize(self, *a, **kw)
         uid = self.read_secure_cookie('user_id')
         self.user = uid and User.by_id(int(uid))
-        if self.user:
-            self.response.write('<br>motherfucker!')
-            self.response.write(self.user.name)
 
 
 # ======= FRONT PAGE COOKIE STUFF ==
