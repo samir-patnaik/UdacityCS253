@@ -20,6 +20,8 @@ import re
 import jinja2
 import webapp2
 
+import json
+
 from google.appengine.ext import db
 
 template_dir = os.path.join(os.path.dirname(__file__), 'templates')
@@ -52,6 +54,11 @@ class BlogHandler(webapp2.RequestHandler):
         params['user'] = self.user
         return render_str(template, **params)
 
+    def render_json(self, d):
+        json_txt = json.dumps(d)
+        self.response.headers['Content-Type'] = 'application/json; charset=UTF-8'
+        self.write(json_txt)
+
     def render(self, template, **kw):
         self.write(self.render_str(template, **kw))
 
@@ -82,6 +89,10 @@ class BlogHandler(webapp2.RequestHandler):
         uid = self.read_secure_cookie('user_id')
         self.user = uid and User.by_id(int(uid))
 
+        if self.request.url.endswith('.json'):
+            self.format = 'json'
+        else:
+            self.format = 'html'
 
 # ======= FRONT PAGE COOKIE STUFF ==
 
@@ -131,6 +142,15 @@ class Post(db.Model):
         self._render_text = self.content.replace('\n', '<br>') #replaces new lines in the form with <br>
         return render_str("post.html", p = self)
 
+    def as_dict(self):
+        time_format = '%c'
+        d = { 'subject': self.subject,
+              'content': self.content,
+              'created': self.created.strftime(time_format),
+              'last_modified': self.last_modified.strftime(time_format)}
+        return d
+
+
 # Blog Front Page Handler
 class BlogFront(BlogHandler):
     def get(self):
@@ -138,7 +158,11 @@ class BlogFront(BlogHandler):
         ''' Render 10 latest posts from Google Datastore'''
 
         posts = Post.all().order('-created')
-        self.render("front.html", posts = posts)
+
+        if self.format == 'html':
+            self.render("front.html", posts = posts)
+        else:
+            self.render_json([p.as_dict() for p in posts])
 
 # Blog Post Permalink Handler
 class PostPage(BlogHandler):
@@ -149,8 +173,10 @@ class PostPage(BlogHandler):
         if not post:
             self.error(404)
             return
-
-        self.render("permalink.html", post = post)
+        if self.format == 'html':
+            self.render("permalink.html", post = post)
+        else:
+            self.render_json(post.as_dict())
 
 class NewPost(BlogHandler):
     def get(self):
@@ -349,8 +375,8 @@ class ThanksPage(BlogHandler):
 # ======= MAIN APP ROUTING ==
 app = webapp2.WSGIApplication([
     ('/', MainPage),
-    ('/blog/?', BlogFront),
-    ('/blog/([0-9]+)', PostPage),
+    ('/blog/?(?:\.json)?', BlogFront),
+    ('/blog/([0-9]+)(?:\.json)?', PostPage),
     ('/blog/newpost', NewPost),
     ('/blog/signup', Register),
     ('/blog/login', Login),
