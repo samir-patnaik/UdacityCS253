@@ -22,6 +22,9 @@ import webapp2
 
 import json
 
+from datetime import datetime, timedelta
+
+from google.appengine.api import memcache
 from google.appengine.ext import db
 
 template_dir = os.path.join(os.path.dirname(__file__), 'templates')
@@ -98,7 +101,7 @@ class BlogHandler(webapp2.RequestHandler):
 
 class MainPage(BlogHandler):
     def get(self):
-        self.response.headers['Content-Type'] = 'text/plain'
+        self.response.headers['Content-Type'] = 'text/html'
         visits = 0
         visit_cookie_val = self.request.cookies.get('visits')
         if visit_cookie_val:
@@ -113,10 +116,11 @@ class MainPage(BlogHandler):
 
         self.response.headers.add_header('Set-Cookie', 'visits=%s' % new_cookie_val)
 
-        if visits > 100 and visits < 105:
-            self.write("You are the best ever!")
-        else:
-            self.write("You've been here %s times!" % visits)
+        # if visits > 100 and visits < 105:
+        #     self.write("You are the best ever!")
+        # else:
+        #     self.write("You've been here %s times!" % visits)
+        self.render("index.html")
 
 
 # ======= BLOG STUFF ==
@@ -131,6 +135,44 @@ def render_post(response, post):
 # == Post Database Model Class ==
 def blog_key(name = 'default'):
     return db.Key.from_path('blogs', name)
+
+# Memcache Helper Functions
+def age_set(key, val):
+    save_time = datetime.utcnow()
+    memcache.set(key, (val, save_time))
+
+def age_get(key):
+    r = memcache.get(key)
+    if r:
+        val, save_time = r
+        age = (datetime.utcnow() - save_time).total_seconds()
+    else:
+        val, age = None, 0
+
+    return val, age
+
+def add_post(ip, post):
+    post.put()
+    get_posts(update = True)
+    return str(post.key().id())
+
+def get_posts(update = False):
+    memc_key = 'BLOGS'
+    posts, age = age_get(memc_key)
+
+    if update or posts is None:
+        q = Post.all().order('-created').fetch(limit = 10)
+        posts = list(q)
+        age_set(memc_key, posts)
+
+    return posts, age
+
+def age_str(age):
+    s = 'queried %s seconds ago'
+    age = int(age)
+    if age == 1:
+        s = s.replace('seconds', 'second')
+    return s % age
 
 class Post(db.Model):
     subject = db.StringProperty(required = True)
@@ -155,26 +197,34 @@ class Post(db.Model):
 class BlogFront(BlogHandler):
     def get(self):
 
-        ''' Render 10 latest posts from Google Datastore'''
+        ''' Render 10 latest posts from Memcache if not then from Google Datastore'''
 
-        posts = Post.all().order('-created')
+        posts, age = get_posts()
 
         if self.format == 'html':
-            self.render("front.html", posts = posts)
+            self.render("front.html", posts = posts, age = age_str(age))
         else:
             self.render_json([p.as_dict() for p in posts])
 
 # Blog Post Permalink Handler
 class PostPage(BlogHandler):
     def get(self, post_id):
-        key = db.Key.from_path('Post', int(post_id), parent = blog_key())
-        post = db.get(key)
+        # key = db.Key.from_path('Post', int(post_id), parent = blog_key())
+        post_key = 'POST_' + post_id
+
+        post, age = age_get(post_key)
+        if not post:
+            key = db.Key.from_path('Post', int(post_id), parent = blog_key())
+            post = db.get(key)
+            age_set(post_key, post)
+            age = 0
 
         if not post:
             self.error(404)
             return
+
         if self.format == 'html':
-            self.render("permalink.html", post = post)
+            self.render("permalink.html", post = post, age = age_str(age))
         else:
             self.render_json(post.as_dict())
 
